@@ -1,0 +1,56 @@
+@startuml
+autonumber
+skinparam roundcorner 10
+skinparam shadowing true
+
+actor "Security Analyst" as Analyst
+boundary "AwtDashboardFrame" as UI
+boundary "AwtAlertFormDialog" as Form
+control "Team6_AlertManagement" as AlertService
+control "Team6_RiskRanking" as RiskService
+entity "CanAlert / V2xAlert" as Model
+database "AlertDao" as DAO
+database "SQLite Database" as DB
+
+Analyst -> UI : Click "+ Add Alert"
+UI -> Form : Open AwtAlertFormDialog(null)
+Form --> Analyst : Display Input Controls
+
+Analyst -> Form : Enter Domain="CAN", Attack="DoS", Conf=0.90
+Analyst -> Form : Click "Create Alert"
+Form -> Model : Instantiate CanAlert(canId=291, ...)
+Form -> RiskService : recalculateHeuristicRiskScores([alert])
+activate RiskService
+RiskService -> Model : calculateHeuristicRisk(criticality=5.0, impact=4.0)
+activate Model
+note right of Model
+  Heuristic Calculation:
+  Criticality x Impact Weight x Confidence
+  (5.0 x 4.0 x 0.90 = 18.00)
+end note
+Model --> RiskService : Return Heuristic Risk Score (18.00)
+deactivate Model
+RiskService --> Form : Return Scored Alert
+deactivate RiskService
+
+Form -> AlertService : ap25110090004_AlertManagement_create(alert)
+activate AlertService
+AlertService -> AlertService : validateAlert(alert)
+AlertService -> DAO : save(alert)
+activate DAO
+DAO -> DB : PreparedStatement: INSERT INTO alerts (...)
+DB --> DAO : Return Generated alert_id=7684
+DAO --> AlertService : Return Persisted Alert
+deactivate DAO
+AlertService --> Form : Alert Created Successfully
+deactivate AlertService
+
+Form --> UI : Close Modal Dialog (saved=true)
+UI -> AlertService : getAllAlerts() / filterAlerts()
+AlertService -> DAO : findAll()
+DAO -> DB : SELECT * FROM alerts ORDER BY risk_score DESC
+DB --> DAO : ResultSet
+DAO --> UI : List<Alert>
+UI --> Analyst : Refresh AWT List & Detail Inspector
+
+@enduml
